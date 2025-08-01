@@ -130,7 +130,7 @@ download_file(){
     local converted_size=$(numfmt --to iec --format "%8.4f" ${size})
     log "  File Download size: ${converted_size}"
     log "  Retrieving: ${url}"
-    curl -L -# ${url} -o "${dest}" || exit_error "${COLRED}Error${COLRESET} downloading ${url} to ${dest}"
+    curl -C - -L -# ${url} -o "${dest}" || exit_error "${COLRED}Error${COLRESET} downloading ${url} to ${dest}"
 
     # If checksum URL was provided, download it (if not done already)
     if [[ -n "${checksum_url}" && -n "${checksum_file}" && ! -f "${checksum_file}" ]]; then
