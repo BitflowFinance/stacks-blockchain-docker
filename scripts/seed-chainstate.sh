@@ -90,6 +90,12 @@ download_file(){
     log
     log "Checking for ${dest}"
 
+    # Ensure aria2c is installed
+    if ! command -v aria2c >/dev/null 2>&1; then
+        log "  aria2c not found. Installing..."
+        apt-get update && apt-get install -y aria2 || exit_error "${COLRED}Error${COLRESET} installing aria2c"
+    fi
+
     # Check if file exists locally and if we should verify checksum
     if [[ -f "${dest}" && -n "${checksum_url}" && -n "${checksum_file}" ]]; then
         log "  File exists locally. Checking remote checksum..."
@@ -120,17 +126,13 @@ download_file(){
         log "  ${COLYELLOW}File exists but cannot verify checksum. Will download fresh copy.${COLRESET}"
     fi
 
-    # Download the file
-    local http_code=$(curl --output /dev/null --silent --head -w "%{http_code}" ${url})
+    # Download the file with aria2c
     log "Downloading ${url} data to: ${dest}"
-    if [[ "${http_code}" && "${http_code}" != "200" ]];then
-        exit_error "${COLRED}Error${COLRESET} - ${url} doesn't exist"
-    fi
     local size=$( curl -s -L -I ${url} | awk -v IGNORECASE=1 '/^content-length/ { print $2 }' | sed 's/\r$//' )
     local converted_size=$(numfmt --to iec --format "%8.4f" ${size})
     log "  File Download size: ${converted_size}"
-    log "  Retrieving: ${url}"
-    curl -C - -L -# ${url} -o "${dest}" || exit_error "${COLRED}Error${COLRESET} downloading ${url} to ${dest}"
+    log "  Retrieving with aria2c: ${url}"
+    aria2c -x 16 -s 16 -c -o "${dest}" "${url}" || exit_error "${COLRED}Error${COLRESET} downloading ${url} to ${dest}"
 
     # If checksum URL was provided, download it (if not done already)
     if [[ -n "${checksum_url}" && -n "${checksum_file}" && ! -f "${checksum_file}" ]]; then
