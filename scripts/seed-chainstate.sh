@@ -70,7 +70,7 @@ check_network() {
 	local profile="${1}"
 	${VERBOSE} && log "Checking if default services are running"
 	# Determine if the services are already running
-	if [[ $(docker-compose -f "${SCRIPTPATH}/compose-files/common.yaml" --profile ${profile} ps -q) ]]; then
+	if [[ $(docker compose -f "${SCRIPTPATH}/compose-files/common.yaml" --profile ${profile} ps -q) ]]; then
 		${VERBOSE} && log "Docker services have a pid"
         log "Stacks Blockchain services are currently running."
         log "  Stop services with: ./manage.sh -n ${NETWORK} -a stop"
@@ -120,6 +120,12 @@ download_file(){
         log "  ${COLYELLOW}File exists but cannot verify checksum. Will download fresh copy.${COLRESET}"
     fi
 
+    # Check if aria2c is available
+    local use_aria2=false
+    if command -v aria2c &> /dev/null; then
+        use_aria2=true
+    fi
+
     # Download the file
     local http_code=$(curl --output /dev/null --silent --head -w "%{http_code}" ${url})
     log "Downloading ${url} data to: ${dest}"
@@ -130,7 +136,25 @@ download_file(){
     local converted_size=$(numfmt --to iec --format "%8.4f" ${size})
     log "  File Download size: ${converted_size}"
     log "  Retrieving: ${url}"
-    curl -C - -L -# ${url} -o "${dest}" || exit_error "${COLRED}Error${COLRESET} downloading ${url} to ${dest}"
+    if [[ "${use_aria2}" == true ]]; then
+        log "  Using aria2c for faster download"
+        aria2c \
+            -x 10 \
+            -s 10 \
+            --summary-interval=0 \
+            --max-tries=10 \
+            --retry-wait=5 \
+            --dir="$(dirname "${dest}")" \
+            --out="$(basename "${dest}")" \
+            "${url}" || exit_error "${COLRED}Error${COLRESET} downloading ${url} to ${dest}"
+    else
+        # Fallback to curl
+        curl -L -# \
+            -C - \
+            --retry 10 \
+            --retry-delay 5 \
+            "${url}" -o "${dest}" || exit_error "${COLRED}Error${COLRESET} downloading ${url} to ${dest}"
+    fi
 
     # If checksum URL was provided, download it (if not done already)
     if [[ -n "${checksum_url}" && -n "${checksum_file}" && ! -f "${checksum_file}" ]]; then
